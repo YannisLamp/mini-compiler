@@ -1,0 +1,155 @@
+/* String operation language; parser evaluates constant expressions on the fly*/
+/**
+ *  Package and Import Specifications
+ */
+import java.util.*;
+import java_cup.runtime.*;
+
+/**
+ *  Usercode Components
+ */
+parser code {:
+    // Connect this parser to a scanner!
+    Scanner s;
+    Parser(Scanner s){ this.s=s; }
+:}
+
+/* define how to connect to the scanner! */
+scan with {: return s.next_token(); :};
+
+/**
+ *  Symbol Lists
+ */
+
+/* Terminals (tokens returned by the scanner). */
+terminal            PLUS, EQUALS, LPAREN, RPAREN, LBRACE, RBRACE, COMMA;
+terminal            IF, ELSE, IN;
+terminal String     STRING, IDENTIFIER;
+
+/*  Non terminals */
+non terminal              program;
+non terminal List<String> fundecl_list, out_funcall_list;
+non terminal String       identifier_comma, out_args, inn_args;
+non terminal String       fundecl, out_funcall, inn_funcall, inn_val;
+non terminal String       out_val, out_cond, inn_cond;
+
+/**
+ *  Precedence Declarations
+ */
+
+precedence left ELSE, PLUS;
+precedence left EQUALS, IN;
+
+/**
+ *  The Grammar Rules
+ */
+
+program ::= fundecl_list:fdl out_funcall_list:outfcl
+{:
+    System.out.println("public class Main {");
+    System.out.println("\tpublic static void main(String[] args) {");
+    /* The first function called is the first element of fdl */
+    System.out.println("\t\tSystem.out.println(" + fdl.get(0) + ");");
+    for (int i = outfcl.size() - 1; i >= 0; i--)
+        System.out.println("\t\tSystem.out.println(" + outfcl.get(i) + ");");
+    System.out.println("\t}\n");
+    for (int i = fdl.size() - 1; i > 1; i--)
+        System.out.println("\tpublic static String " + fdl.get(i) + "\n");
+    System.out.println("\tpublic static String " + fdl.get(1) + "\n}");
+:}
+;
+
+/* Function declarations */
+fundecl_list ::= fundecl:fd fundecl_list:fdl
+{: fdl.add(fd); RESULT = fdl; :}
+               | out_funcall:outfc
+{: LinkedList<String> fdl = new LinkedList<String>(); fdl.add(outfc); RESULT = fdl; :}
+               ;
+
+fundecl  ::= IDENTIFIER:fname LPAREN identifier_comma:idc RPAREN LBRACE inn_val:ival RBRACE
+{: RESULT = fname + "(" + idc + ") {\n\t\treturn " + ival + ";\n\t}"; :}
+          | IDENTIFIER:fname LPAREN RPAREN LBRACE inn_val:ival RBRACE
+{: RESULT = fname + "() {\n\t\treturn " + ival + ";\n\t}"; :}
+          ;
+
+/* Inner and outer function calls (outer functions calls cannot contain identifiers) */
+out_funcall_list ::= out_funcall:outfc out_funcall_list:outfcl
+{: outfcl.add(outfc); RESULT = outfcl; :}
+                   | /*empty*/
+{: RESULT = new LinkedList<String>(); :}
+                   ;
+
+out_funcall ::= IDENTIFIER:id LPAREN out_args:outargs RPAREN
+{: RESULT = id + "(" + outargs + ")"; :}
+              | IDENTIFIER:id LPAREN RPAREN
+{: RESULT = id + "()"; :}
+              ;
+
+inn_funcall ::= IDENTIFIER:id LPAREN inn_args:innargs RPAREN
+{: RESULT = id + "(" + innargs + ")"; :}
+              | IDENTIFIER:id LPAREN RPAREN
+{: RESULT = id + "()"; :}
+              ;
+
+
+identifier_comma ::= IDENTIFIER:id COMMA identifier_comma:idc
+{: RESULT = "String " + id + ", " + idc; :}
+                   | IDENTIFIER:id
+{: RESULT = "String " + id; :}
+                   ;
+
+/* Inner and outer values (for inner and outer function calls) */
+inn_val ::= inn_val:ival1 PLUS inn_val:ival2
+{: RESULT = ival1 + " + " + ival2; :}
+          | IF LPAREN inn_cond:icon RPAREN inn_val:ival1 ELSE inn_val:ival2
+{: RESULT =  icon + " ? " + ival1 + " : " + ival2; :}
+          | inn_funcall:ifc
+{: RESULT = ifc; :}
+          | IDENTIFIER:id
+{: RESULT = id; :}
+          | STRING:s
+{: RESULT = '"' + s + '"'; :}
+          | LPAREN inn_val:ival RPAREN
+{: RESULT = '(' + ival + ')'; :}
+          ;
+
+out_val ::= out_val:oval1 PLUS out_val:oval2
+{: RESULT = oval1 + " + " + oval2; :}
+          | IF LPAREN out_cond:ocon RPAREN out_val:oval1 ELSE out_val:oval2
+{: RESULT = ocon + " ? " + oval1 + " : " + oval2; :}
+          | out_funcall:outfc
+{: RESULT = outfc; :}
+          | STRING:s
+{: RESULT = '"' + s + '"'; :}
+          | LPAREN out_val:oval RPAREN
+{: RESULT = '(' + oval + ')'; :}
+          ;
+
+
+/* Inner and outer conditions (for inner and outer function call ifs) */
+inn_cond ::= inn_val:ival1 EQUALS inn_val:ival2
+{: RESULT = "(" + ival1 + ").equals(" + ival2 + ")"; :}
+           | inn_val:ival1 IN inn_val:ival2
+{: RESULT = "(" + ival2 + ").contains(" + ival1 + ")"; :}
+           ;
+
+out_cond ::= out_val:oval1 EQUALS out_val:oval2
+{: RESULT = "(" + oval1 + ").equals(" + oval2 + ")"; :}
+           | out_val:oval1 IN out_val:oval2
+{: RESULT = "(" + oval2 + ").contains(" + oval1 + ")"; :}
+           ;
+
+
+/* Inner and outer arguments (for inner and outer function calls) */
+out_args ::= out_val:oval COMMA out_args:outargs
+{: RESULT = oval + ", " + outargs; :}
+           | out_val:oval
+{: RESULT = oval; :}
+           ;
+
+
+inn_args ::= inn_val:ival COMMA inn_args:innargs
+{: RESULT = ival + ", " + innargs; :}
+           | inn_val:ival
+{: RESULT = ival; :}
+           ;
